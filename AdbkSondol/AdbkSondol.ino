@@ -34,53 +34,58 @@
 #include <MozziGuts.h>
 #include <Sample.h> 
 #include <samples/impulse/sine_impulse25.h>
-#include <EventDelay.h>
 #include <RollingAverage.h>
 #include <mozzi_rand.h>
 
-#define CONTROL_RATE 64
+#define CONTROL_RATE 128
 
 Sample <IMPULSE25_NUM_CELLS, AUDIO_RATE> aSample(IMPULSE25_DATA);
 
 RollingAverage <int, 16> avgA0; // average value of A0 over the last 16 reads
 RollingAverage <int, 16> avgA1; // average value of A1 over the last 16 reads
-RollingAverage <int, 16> avgA2; // average value of A2 over the last 16 reads
 
-// for scheduling sample start
-EventDelay kTriggerDelay;
-
-float gain = 0.0;
 float freq = 0.0;
-int tdelay = 1500;
+int tdelay = 6000;
+
+unsigned long deltaT = 0;
+unsigned long currentT = 0;
+unsigned long lastT = 0;
 
 
 void setup(){
+  Serial.begin(9600);
+  
   startMozzi(CONTROL_RATE);
-  aSample.setFreq((float) IMPULSE25_SAMPLERATE / (float) IMPULSE25_NUM_CELLS * 3); 
-  kTriggerDelay.set(1500); 
+  aSample.setFreq(0); 
 }
 
 
 void updateControl(){
-  gain = avgA0.next(mozziAnalogRead(0)) / 1023.0;
-  freq = (float) IMPULSE25_SAMPLERATE / (float) IMPULSE25_NUM_CELLS * (avgA2.next(mozziAnalogRead(2))/1023.0*5.0 + 0.5);
+  freq = (float) IMPULSE25_SAMPLERATE / (float) IMPULSE25_NUM_CELLS * ((float)avgA1.next(mozziAnalogRead(1))/1023.0*2.5 + 0.4);
   
   aSample.setFreq(freq);
-  
-  tdelay = 4110 - avgA1.next(mozziAnalogRead(1))*4;
-  
-  if(kTriggerDelay.ready()){
-    
-    kTriggerDelay.set(tdelay);
-    
+
+  tdelay = 4*avgA0.next(mozziAnalogRead(0)) + 20;
+
+  currentT = mozziMicros();
+
+  if (currentT >= lastT) {
+    deltaT += (unsigned long)((currentT-lastT)/1000.0);
+  }
+  else {
+    deltaT += (unsigned long)((((unsigned long)-1) - lastT + currentT)/1000.0);  
+  }
+  lastT = currentT;
+
+  if (deltaT > (unsigned long)tdelay) {
     aSample.start();
-    kTriggerDelay.start();
+    deltaT = 0;
   }
 }
 
 
 int updateAudio(){
-  return (int) (gain * aSample.next() * 6.0);
+  return (int) (aSample.next() * 16);
 }
 
 
