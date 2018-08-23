@@ -27,7 +27,8 @@
  */
 
 /*****************************************************************************  
- *  Sound synthesis using an oscillator with gain control
+ *  photo sensitive synthesizer (single oszi for multi-channel output on
+ *  multiple arduinos)
  *****************************************************************************/
 
 #include <MozziGuts.h>

@@ -27,7 +27,7 @@
  */
 
 /*****************************************************************************  
- *  Sound synthesis using an oscillator with gain control
+ *  photo sensitive synthesizer (mix of 3 oszis for single channel output)
  *****************************************************************************/
 
 #include <MozziGuts.h>
