@@ -32,11 +32,10 @@
 
 //#define DEBUG
 
-#define PULSER_ID 0
+#define PULSER_ID 4
 
 #define LED 13
 #define VBATPIN A9
-#define STATUSLED 12
  
 // for feather32u4 
 #define RFM95_CS 8
@@ -143,9 +142,9 @@ void loop()
   measuredvbat *= 3.3;  // Multiply by 3.3V, our reference voltage
   measuredvbat /= 1024; // convert to voltage
  // measuredvbat = 3.8;
-//#ifdef DEBUG
-//  Serial.print("VBat: " ); Serial.println(measuredvbat);
-//#endif
+#ifdef DEBUG
+  Serial.print("VBat: " ); Serial.println(measuredvbat);
+#endif
 
  // batcnt = constrain(measuredvbat-3.2, 0.0, 0.7)/0.7*9 + 1;
 
@@ -171,7 +170,9 @@ void loop()
 
   // mean filter and floor  poti values to account for unstable measurements (alternating values...) 
   ppmBuffer[ppmBufferIdx] = analogRead(A0);
-  ppm = (uint16_t)((ppmBuffer[0] + ppmBuffer[1] + ppmBuffer[2])/3.0);
+  float ppmNew = (ppmBuffer[0] + ppmBuffer[1] + ppmBuffer[2])/3.0f;
+  if (abs(ppmNew - ppm) >= 1)
+    ppm = (uint16_t)(ppmNew+0.5);
   ppmBufferIdx = (ppmBufferIdx + 1) % 3;
 
 

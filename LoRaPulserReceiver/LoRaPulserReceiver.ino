@@ -30,9 +30,9 @@
 #include <RH_RF95.h>
 #include "LoRaPulserMsg.h"
 
-#define DEBUG
+//#define DEBUG
 
-#define PULSER_ID         0
+#define PULSER_ID         1
 #define PPM_MAX           300
 
 #define IRUPT_DT          1024/(double)8000000*255
@@ -118,7 +118,7 @@ void setup()
   // you can set transmitter powers from 5 to 23 dBm:
   rf95.setTxPower(23, false);
 
-  ppmRaw = (uint16_t)(60.0*1022.0/(PPM_MAX-1));
+  ppmRaw = 0;//(uint16_t)(60.0*1022.0/(PPM_MAX-1));
   iruptCnt = 0;
   iruptCntMax = 0;
 
@@ -144,12 +144,17 @@ void setup()
 // interrupt handler
 ISR(TIMER0_COMPA_vect)  //  TIMER0_OVF_vect
 {
+  if (ppmRaw > 0 && iruptCnt == 0) {
+    digitalWrite(LED, LOW);
+  }
+  
   TCNT0 = 0;                // Register mit 0 initialisieren   
   iruptCnt++;
   iruptCntNoReceive++;
 
   if (ppmRaw > 0 && iruptCnt == iruptCntMax) {
-    digitalWrite(LED, digitalRead(LED) ^ 1); // LED ein und aus
+    digitalWrite(LED, HIGH); 
+    //digitalWrite(LED, digitalRead(LED) ^ 1); // LED ein und aus
     iruptCnt = 0;
   } 
 }
@@ -160,6 +165,9 @@ void setupPPM(uint16_t ppm_raw) {
     float ppm = (ppm_raw-1)/1022.0 * (PPM_MAX - 1) + 1;
     iruptCntMax = (uint16_t)(60.0/(IRUPT_DT * ppm) + 0.5);
     iruptCnt = 0;
+  }
+  else {
+    digitalWrite(LED, LOW);
   }
 }
 
@@ -180,29 +188,30 @@ void loop()
       Serial.print("# Bytes received: "); Serial.println(len);
 #endif
 
-      if (len >= LORAPULSER_MSGLEN) {
+      if (len >= LORAPULSER_MSGLEN && buf[0] == PULSER_ID) {
         memcpy(rxMsg.getData(), buf, LORAPULSER_MSGLEN);
         memcpy(txMsg.getData(), buf, LORAPULSER_MSGLEN);
         
-        if (rxMsg.getPulserId() == PULSER_ID) {
+      //  if (rxMsg.getPulserId() == PULSER_ID) {
 
 #ifdef DEBUG
-          Serial.print("p_id: "); Serial.print(rxMsg.getPulserId()); 
-          Serial.print("  m_id: "); Serial.print(rxMsg.getMessageId()); 
-          Serial.print("  ppm: "); Serial.println(rxMsg.getPPM());
+        Serial.print("p_id: "); Serial.print(rxMsg.getPulserId()); 
+        Serial.print("  m_id: "); Serial.print(rxMsg.getMessageId()); 
+        Serial.print("  ppm: "); Serial.println(rxMsg.getPPM());
+        Serial.print("RSSI: "); Serial.println(rf95.lastRssi(), DEC);
 #endif
 
-          iruptCntNoReceive = 0;
+        iruptCntNoReceive = 0;
 
-          if (rxMsg.getPPM() != ppmRaw) {
-            ppmRaw = rxMsg.getPPM();
-            setupPPM(ppmRaw);
-          }
-
-          rf95.send(txMsg.getData(), LORAPULSER_MSGLEN);
-          rf95.waitPacketSent();  
+        if (rxMsg.getPPM() != ppmRaw) {
+          ppmRaw = rxMsg.getPPM();
+          setupPPM(ppmRaw);
         }
+
+        rf95.send(txMsg.getData(), LORAPULSER_MSGLEN);
+        rf95.waitPacketSent();  
       }
+    //  }
 
     /*  
       RH_RF95::printBuffer("Received: ", buf, len);
