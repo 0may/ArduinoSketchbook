@@ -71,6 +71,10 @@ public:
     *(this->ppm) = ppm;
   }
 
+  void setInstantPulse() {
+    *(this->ppm) = (uint16_t)-1;
+  }
+
   uint8_t* getData() {
     return this->data;
   }
@@ -85,6 +89,10 @@ public:
 
   uint16_t getPPM() {
     return *(this->ppm);
+  }
+
+  bool isInstantPulse() {
+    return (*(this->ppm) == (uint16_t)-1);
   }
   
 };

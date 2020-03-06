@@ -26,7 +26,7 @@ http://www.wtfpl.net/ for more details.
 #define PIN_RELAIS4 10
 #define PIN_RELAIS5 11
 #define PIN_RELAIS6 12
-#define PIN_RELAIS7 13
+#define PIN_RELAIS7 A5
 
 MIDI_CREATE_DEFAULT_INSTANCE();
 
@@ -147,10 +147,12 @@ void setup()
     MIDI.begin(MIDI_CHANNEL_OMNI);
     MIDI.setHandleNoteOn(handleNoteOn);
     MIDI.setHandleNoteOff(handleNoteOff);
+
 }
 
 void loop()
 {
+
   
     MIDI.read();   
     

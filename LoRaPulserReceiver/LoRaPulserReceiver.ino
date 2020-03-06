@@ -32,8 +32,8 @@
 
 //#define DEBUG
 
-#define PULSER_ID         1
-#define PPM_MAX           300
+#define PULSER_ID         4
+#define PPM_MAX           600
 
 #define IRUPT_DT          1024/(double)8000000*255
 #define IRUPTCNT_PPM_1    60.0/(IRUPT_DT)
@@ -60,6 +60,10 @@ uint16_t iruptCntMax;
 
 uint16_t iruptCntNoReceive;
 uint16_t iruptCntNoReceiveLim;
+
+uint16_t msgIdLast = (uint16_t)-1;
+
+bool instantPulsing = false;
  
 void setup()
 {
@@ -144,17 +148,20 @@ void setup()
 // interrupt handler
 ISR(TIMER0_COMPA_vect)  //  TIMER0_OVF_vect
 {
-  if (ppmRaw > 0 && iruptCnt == 0) {
+  //if (ppmRaw > 0 && iruptCnt == 0) {
+  if (digitalRead(LED) == HIGH) {
     digitalWrite(LED, LOW);
+    instantPulsing = false;
   }
   
   TCNT0 = 0;                // Register mit 0 initialisieren   
   iruptCnt++;
   iruptCntNoReceive++;
 
-  if (ppmRaw > 0 && iruptCnt == iruptCntMax) {
-    digitalWrite(LED, HIGH); 
-    //digitalWrite(LED, digitalRead(LED) ^ 1); // LED ein und aus
+  if ((ppmRaw > 0 && iruptCnt == iruptCntMax) || instantPulsing) {
+    //if (digitalRead(LED) == LOW)
+    digitalWrite(LED, HIGH);
+    
     iruptCnt = 0;
   } 
 }
@@ -174,9 +181,15 @@ void setupPPM(uint16_t ppm_raw) {
  
 void loop()
 {
+
+
  // delay(100);
   if (rf95.available())
   {
+
+#ifdef DEBUG
+      Serial.println("Loop start "); 
+#endif
     // Should be a message for us now
     uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
     uint8_t len = sizeof(buf);
@@ -191,27 +204,35 @@ void loop()
       if (len >= LORAPULSER_MSGLEN && buf[0] == PULSER_ID) {
         memcpy(rxMsg.getData(), buf, LORAPULSER_MSGLEN);
         memcpy(txMsg.getData(), buf, LORAPULSER_MSGLEN);
-        
-      //  if (rxMsg.getPulserId() == PULSER_ID) {
-
-#ifdef DEBUG
-        Serial.print("p_id: "); Serial.print(rxMsg.getPulserId()); 
-        Serial.print("  m_id: "); Serial.print(rxMsg.getMessageId()); 
-        Serial.print("  ppm: "); Serial.println(rxMsg.getPPM());
-        Serial.print("RSSI: "); Serial.println(rf95.lastRssi(), DEC);
-#endif
-
+    
         iruptCntNoReceive = 0;
-
-        if (rxMsg.getPPM() != ppmRaw) {
-          ppmRaw = rxMsg.getPPM();
-          setupPPM(ppmRaw);
+            
+        if (rxMsg.getMessageId() != msgIdLast) {
+          msgIdLast = rxMsg.getMessageId();
+#ifdef DEBUG
+          Serial.print("p_id: "); Serial.print(rxMsg.getPulserId()); 
+          Serial.print("  m_id: "); Serial.print(rxMsg.getMessageId()); 
+          Serial.print("  ppm: "); Serial.println(rxMsg.getPPM());
+          Serial.print("RSSI: "); Serial.println(rf95.lastRssi(), DEC);
+#endif
+  
+  
+          if (rxMsg.isInstantPulse()) {
+#ifdef DEBUG            
+            Serial.println("SHOT!!");
+#endif
+            instantPulsing = true;
+            TCNT0 = 255;
+          }
+          else if (rxMsg.getPPM() != ppmRaw) {
+            ppmRaw = rxMsg.getPPM();
+            setupPPM(ppmRaw);
+          //  rf95.send(txMsg.getData(), LORAPULSER_MSGLEN);
+          //  rf95.waitPacketSent();  
+          }
+  
         }
-
-        rf95.send(txMsg.getData(), LORAPULSER_MSGLEN);
-        rf95.waitPacketSent();  
       }
-    //  }
 
     /*  
       RH_RF95::printBuffer("Received: ", buf, len);

@@ -32,8 +32,9 @@
 
 //#define DEBUG
 
-#define PULSER_ID 4
+#define PULSER_ID 1
 
+#define BUTTON 11
 #define LED 13
 #define VBATPIN A9
  
@@ -50,7 +51,8 @@ RH_RF95 rf95(RFM95_CS, RFM95_INT);
 
 
 uint16_t ppm;
-uint16_t ppmBuffer[3];
+uint16_t ppmPrev;
+uint16_t ppmBuffer[9];
 uint8_t ppmBufferIdx;
 LoRaPulserMsg txMsg;
 LoRaPulserMsg rxMsg;
@@ -62,9 +64,14 @@ uint8_t rxBufLen;
 uint8_t batcnt = 0;
 
 unsigned long t_send = 0;
+unsigned long t_now = 0;
+
+uint8_t buttonStatePrev = HIGH;
+uint8_t buttonState;
  
 void setup() 
 {
+  pinMode(BUTTON, INPUT_PULLUP);
   pinMode(LED, OUTPUT);
   pinMode(RFM95_RST, OUTPUT);
   digitalWrite(RFM95_RST, HIGH);
@@ -121,6 +128,7 @@ void setup()
   rf95.setTxPower(23, false);
 
   ppm = 0;
+  ppmPrev = 0;
   ppmBuffer[0] = 0;
   ppmBuffer[1] = 0;
   ppmBuffer[2] = 0;
@@ -134,7 +142,7 @@ void setup()
  
 void loop()
 {
-  delay(50); // Wait 50 ms between transmits, could also 'sleep' here!
+ // delay(50); // Wait 50 ms between transmits, could also 'sleep' here!
 
        
   float measuredvbat = analogRead(VBATPIN);
@@ -143,7 +151,7 @@ void loop()
   measuredvbat /= 1024; // convert to voltage
  // measuredvbat = 3.8;
 #ifdef DEBUG
-  Serial.print("VBat: " ); Serial.println(measuredvbat);
+ // Serial.print("VBat: " ); Serial.println(measuredvbat);
 #endif
 
  // batcnt = constrain(measuredvbat-3.2, 0.0, 0.7)/0.7*9 + 1;
@@ -167,22 +175,58 @@ void loop()
     digitalWrite(LED, HIGH);
   }
 
+  buttonState = digitalRead(BUTTON);
 
-  // mean filter and floor  poti values to account for unstable measurements (alternating values...) 
-  ppmBuffer[ppmBufferIdx] = analogRead(A0);
-  float ppmNew = (ppmBuffer[0] + ppmBuffer[1] + ppmBuffer[2])/3.0f;
-  if (abs(ppmNew - ppm) >= 1)
-    ppm = (uint16_t)(ppmNew+0.5);
-  ppmBufferIdx = (ppmBufferIdx + 1) % 3;
-
-
-  unsigned long t_now = millis();
-  
-  if (ppm != txMsg.getPPM() || t_now > t_send + 5000 || t_now < t_send) {
-    txMsg.setPPM(ppm);
+  if (buttonState == HIGH && buttonStatePrev == LOW) {
+    buttonStatePrev = HIGH;
+  }
+  else if (buttonState == LOW && buttonStatePrev == HIGH) {
+    
+    txMsg.setInstantPulse();
     txMsg.incrementMessageId();
     sendMsg = true;
-    t_send = t_now;
+    buttonStatePrev = LOW;
+    
+#ifdef DEBUG
+    Serial.println("SHOT!!!!!");
+#endif
+ 
+  }
+  else {
+    
+    // mean filter and floor  poti values to account for unstable measurements (alternating values...) 
+    ppmBuffer[ppmBufferIdx] = analogRead(A0);
+    float ppmNew = (ppmBuffer[0] + ppmBuffer[1] + ppmBuffer[2] + ppmBuffer[3] + ppmBuffer[4])/5.0f;
+    if (/*abs(ppmNew - ppm) > 1 || */
+      (ppmBuffer[0] == ppmBuffer[1] 
+      && ppmBuffer[0] == ppmBuffer[2]
+      && ppmBuffer[0] == ppmBuffer[3]
+      && ppmBuffer[0] == ppmBuffer[4]
+      && ppmBuffer[0] == ppmBuffer[5]
+      && ppmBuffer[0] == ppmBuffer[6]
+      && ppmBuffer[0] == ppmBuffer[7]
+      && ppmBuffer[0] == ppmBuffer[8])) 
+    {
+      ppm = ppmBuffer[0];//(uint16_t)(ppmNew+0.5);
+    }
+    ppmBufferIdx = (ppmBufferIdx + 1) % 9;
+    
+ 
+  
+    t_now = millis();
+    
+    if (ppm != ppmPrev || t_now > t_send + 5000 || t_now < t_send) {
+      
+#ifdef DEBUG
+    Serial.print("new ppm: "); Serial.println(ppm);
+#endif 
+      
+      ppmPrev = ppm;
+      txMsg.setPPM(ppm);
+      txMsg.incrementMessageId();
+      sendMsg = true;
+      t_send = t_now;
+    }
   }
 
   if (!sendMsg && gotReply) {
@@ -197,7 +241,7 @@ void loop()
     Serial.print(" p_id="); Serial.print(txMsg.getPulserId()); 
     Serial.print(" m_id="); Serial.print(txMsg.getMessageId()); 
     Serial.print(" ppm="); Serial.println(txMsg.getPPM());
-    delay(10);
+    //delay(10);
 #endif
 
     rf95.send(txMsg.getData(), LORAPULSER_MSGLEN);
@@ -205,14 +249,16 @@ void loop()
    // delay(10);
     rf95.waitPacketSent();
 
-    gotReply = false;
+    sendMsg = false;
 
-   // digitalWrite(LED, LOW);
-
-#ifdef DEBUG
-  //  Serial.println("Done sending");
-#endif
-
+/* 
+    if (txMsg.isInstantPulse()) {
+      sendMsg = false; 
+      gotReply = true;
+    }
+    else
+      gotReply = false;
+*/
   }
 
   if (!gotReply) {
